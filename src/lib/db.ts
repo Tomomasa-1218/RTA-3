@@ -126,10 +126,14 @@ export async function initDatabase() {
 export async function addPlayer(name: string): Promise<Player> {
   const id = `player_${Date.now()}`;
   try {
+    console.log('プレイヤー追加開始:', { id, name });
+    
     await sql`
       INSERT INTO players (id, name) 
       VALUES (${id}, ${name})
     `;
+    
+    console.log('プレイヤー挿入完了:', { id, name });
     
     const result = await sql`
       SELECT id, name, created_at as "createdAt" 
@@ -137,9 +141,22 @@ export async function addPlayer(name: string): Promise<Player> {
       WHERE id = ${id}
     `;
     
+    console.log('プレイヤー取得結果:', result);
+    
+    if (!result || result.length === 0) {
+      throw new Error('プレイヤーが正常に作成されませんでした');
+    }
+    
     return result[0] as Player;
   } catch (error) {
-    console.error('Failed to add player:', error);
+    console.error('プレイヤー追加エラー:', error);
+    
+    if (error instanceof Error) {
+      if (error.message.includes('unique') || error.message.includes('UNIQUE')) {
+        throw new Error('このプレイヤー名は既に登録されています');
+      }
+      throw new Error(`プレイヤーの追加に失敗しました: ${error.message}`);
+    }
     throw new Error('プレイヤーの追加に失敗しました');
   }
 }
