@@ -45,9 +45,10 @@ export default function Home() {
         }),
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || '記録の保存に失敗しました');
+        throw new Error(data.error || 'データの保存に失敗しました');
       }
 
       // データを再取得
@@ -59,12 +60,15 @@ export default function Home() {
       setFinalPoints(0);
       setAddOns(0);
       setPointBalance(null);
+
+      // 成功メッセージを表示
+      alert('データを保存しました');
     } catch (error) {
       console.error('Error saving record:', error);
       if (error instanceof Error) {
         alert(error.message);
       } else {
-        alert('記録の保存中にエラーが発生しました');
+        alert('データの保存中にエラーが発生しました');
       }
     } finally {
       setIsLoading(false);
