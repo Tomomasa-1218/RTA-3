@@ -5,7 +5,7 @@ import { PokerRecord, PlayerStats } from '@/types/poker';
 
 export default function Home() {
   const [playerName, setPlayerName] = useState<string>('');
-  const [date, setDate] = useState<string>('');
+  const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [initialPoints, setInitialPoints] = useState<number>(0);
   const [finalPoints, setFinalPoints] = useState<number>(0);
   const [addOns, setAddOns] = useState<number>(0);
@@ -13,6 +13,7 @@ export default function Home() {
   const [records, setRecords] = useState<PokerRecord[]>([]);
   const [stats, setStats] = useState<PlayerStats | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const calculatePointBalance = () => {
     const balance = finalPoints - initialPoints * (addOns + 1);
@@ -22,12 +23,13 @@ export default function Home() {
 
   const handleSubmit = async () => {
     if (!playerName || !date) {
-      alert('プレイヤー名と日付を入力してください');
+      setError('プレイヤー名と日付を入力してください');
       return;
     }
 
     const balance = calculatePointBalance();
     setIsLoading(true);
+    setError(null);
 
     try {
       const response = await fetch('/api/records', {
@@ -55,7 +57,7 @@ export default function Home() {
       await loadPlayerData(playerName);
 
       // フォームをリセット
-      setDate('');
+      setDate(new Date().toISOString().split('T')[0]);
       setInitialPoints(0);
       setFinalPoints(0);
       setAddOns(0);
@@ -66,9 +68,9 @@ export default function Home() {
     } catch (error) {
       console.error('Error saving record:', error);
       if (error instanceof Error) {
-        alert(error.message);
+        setError(error.message);
       } else {
-        alert('データの保存中にエラーが発生しました');
+        setError('データの保存中にエラーが発生しました');
       }
     } finally {
       setIsLoading(false);
@@ -79,6 +81,7 @@ export default function Home() {
     if (!name) return;
     
     setIsLoading(true);
+    setError(null);
     try {
       const [recordsResponse, statsResponse] = await Promise.all([
         fetch(`/api/records?playerName=${encodeURIComponent(name)}`),
@@ -86,7 +89,7 @@ export default function Home() {
       ]);
 
       if (!recordsResponse.ok || !statsResponse.ok) {
-        throw new Error('Failed to fetch data');
+        throw new Error('データの取得に失敗しました');
       }
 
       const [recordsData, statsData] = await Promise.all([
@@ -98,7 +101,11 @@ export default function Home() {
       setStats(statsData);
     } catch (error) {
       console.error('Error loading player data:', error);
-      alert('データの読み込み中にエラーが発生しました');
+      if (error instanceof Error) {
+        setError(error.message);
+      } else {
+        setError('データの読み込み中にエラーが発生しました');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -107,6 +114,9 @@ export default function Home() {
   useEffect(() => {
     if (playerName) {
       loadPlayerData(playerName);
+    } else {
+      setRecords([]);
+      setStats(null);
     }
   }, [playerName]);
 
@@ -114,6 +124,12 @@ export default function Home() {
     <main className="container mx-auto px-4 py-8">
       <h1 className="text-3xl font-bold text-center mb-8">ポーカー成績トラッカー</h1>
       
+      {error && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4">
+          <span className="block sm:inline">{error}</span>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         <div className="space-y-4">
           <div>
@@ -134,6 +150,7 @@ export default function Home() {
               value={date}
               onChange={(e) => setDate(e.target.value)}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              max={new Date().toISOString().split('T')[0]}
             />
           </div>
           
@@ -144,6 +161,7 @@ export default function Home() {
               value={initialPoints}
               onChange={(e) => setInitialPoints(Number(e.target.value))}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              min="0"
             />
           </div>
           
@@ -154,6 +172,7 @@ export default function Home() {
               value={finalPoints}
               onChange={(e) => setFinalPoints(Number(e.target.value))}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              min="0"
             />
           </div>
           
@@ -164,6 +183,7 @@ export default function Home() {
               value={addOns}
               onChange={(e) => setAddOns(Number(e.target.value))}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              min="0"
             />
           </div>
           
@@ -175,13 +195,13 @@ export default function Home() {
             {isLoading ? '保存中...' : '記録を保存'}
           </button>
         </div>
-        
-        <div className="space-y-6">
+
+        <div className="space-y-8">
           {/* 計算結果 */}
           <div className="bg-gray-50 p-6 rounded-lg">
             <h2 className="text-xl font-semibold mb-4">計算結果</h2>
             {pointBalance !== null && (
-              <div className="text-2xl font-bold">
+              <div className={`text-2xl font-bold ${pointBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                 ポイント収支: {pointBalance.toLocaleString()}
               </div>
             )}
@@ -202,28 +222,26 @@ export default function Home() {
           )}
 
           {/* 履歴 */}
-          {records.length > 0 && (
-            <div className="bg-gray-50 p-6 rounded-lg">
-              <h2 className="text-xl font-semibold mb-4">履歴</h2>
-              <div className="space-y-4">
-                {records.map((record) => (
-                  <div key={record.id} className="border-b pb-2">
-                    <div className="flex justify-between">
-                      <span>{new Date(record.date).toLocaleDateString()}</span>
-                      <span className={record.pointBalance >= 0 ? 'text-green-600' : 'text-red-600'}>
-                        {record.pointBalance.toLocaleString()}
-                      </span>
-                    </div>
-                    <div className="text-sm text-gray-600">
-                      初期: {record.initialPoints.toLocaleString()} / 
-                      最終: {record.finalPoints.toLocaleString()} / 
-                      アドオン: {record.addOns}回
-                    </div>
+          <div className="bg-gray-50 p-6 rounded-lg">
+            <h2 className="text-xl font-semibold mb-4">履歴</h2>
+            <div className="space-y-4">
+              {records.map((record) => (
+                <div key={record.id} className="border-b pb-2">
+                  <div className="flex justify-between">
+                    <span>{new Date(record.date).toLocaleDateString()}</span>
+                    <span className={record.pointBalance >= 0 ? 'text-green-600' : 'text-red-600'}>
+                      {record.pointBalance.toLocaleString()}
+                    </span>
                   </div>
-                ))}
-              </div>
+                  <div className="text-sm text-gray-600">
+                    初期: {record.initialPoints.toLocaleString()} / 
+                    最終: {record.finalPoints.toLocaleString()} / 
+                    アドオン: {record.addOns}回
+                  </div>
+                </div>
+              ))}
             </div>
-          )}
+          </div>
         </div>
       </div>
     </main>
