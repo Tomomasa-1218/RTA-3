@@ -46,7 +46,8 @@ export default function Home() {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to save record');
+        const errorData = await response.json();
+        throw new Error(errorData.error || '記録の保存に失敗しました');
       }
 
       // データを再取得
@@ -60,7 +61,11 @@ export default function Home() {
       setPointBalance(null);
     } catch (error) {
       console.error('Error saving record:', error);
-      alert('記録の保存中にエラーが発生しました');
+      if (error instanceof Error) {
+        alert(error.message);
+      } else {
+        alert('記録の保存中にエラーが発生しました');
+      }
     } finally {
       setIsLoading(false);
     }

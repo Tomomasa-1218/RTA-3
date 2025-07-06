@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
-import { saveRecord, getPlayerRecords } from '@/lib/db';
+import { saveRecord, getPlayerRecords, initDatabase } from '@/lib/db';
+
+// データベースの初期化
+initDatabase().catch(console.error);
 
 export async function POST(request: Request) {
   try {

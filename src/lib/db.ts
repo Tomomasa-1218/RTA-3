@@ -1,7 +1,22 @@
 import { neon } from '@neondatabase/serverless';
 import { PokerRecord, PlayerStats } from '@/types/poker';
 
-const sql = neon(process.env.DATABASE_URL!);
+// 開発環境用のデフォルト接続文字列（Neonのプロジェクトページから取得）
+const DEV_DATABASE_URL = 'postgres://tomomasa:your-password@ep-cool-forest-123456.us-east-1.aws.neon.tech/neondb?sslmode=require';
+
+const sql = neon(process.env.DATABASE_URL || DEV_DATABASE_URL);
+
+// データベース接続のテスト
+async function testConnection() {
+  try {
+    await sql.query('SELECT 1');
+    console.log('✅ データベース接続成功');
+    return true;
+  } catch (error) {
+    console.error('❌ データベース接続エラー:', error);
+    return false;
+  }
+}
 
 // テーブル作成用のSQL
 const CREATE_TABLES = `
@@ -29,9 +44,15 @@ const CREATE_TABLES = `
 // テーブルの初期化
 export async function initDatabase() {
   try {
+    const isConnected = await testConnection();
+    if (!isConnected) {
+      throw new Error('データベースに接続できません');
+    }
     await sql.query(CREATE_TABLES);
+    console.log('テーブルの初期化が完了しました');
   } catch (error) {
-    console.error('Failed to initialize database:', error);
+    console.error('データベースの初期化に失敗しました:', error);
+    throw error;
   }
 }
 
@@ -55,10 +76,17 @@ export async function saveRecord(record: Omit<PokerRecord, 'id' | 'createdAt'>) 
       [id]
     );
 
+    if (!result || result.length === 0) {
+      throw new Error('保存したレコードが見つかりません');
+    }
+
     return result[0] as PokerRecord;
   } catch (error) {
     console.error('Failed to save record:', error);
-    throw error;
+    if (error instanceof Error) {
+      throw new Error(`記録の保存に失敗しました: ${error.message}`);
+    }
+    throw new Error('記録の保存に失敗しました');
   }
 }
 
