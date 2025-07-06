@@ -1,8 +1,8 @@
 import { neon } from '@neondatabase/serverless';
 import { PokerRecord, PlayerStats } from '@/types/poker';
 
-// 開発環境用のデフォルト接続文字列（Neonのプロジェクトページから取得）
-const DEV_DATABASE_URL = 'postgres://tomomasa:your-password@ep-cool-forest-123456.us-east-1.aws.neon.tech/neondb?sslmode=require';
+// 開発環境用のデフォルト接続文字列
+const DEV_DATABASE_URL = 'postgres://default:default@ep-cool-forest-123456.us-east-1.aws.neon.tech/neondb';
 
 const sql = neon(process.env.DATABASE_URL || DEV_DATABASE_URL);
 
@@ -33,11 +33,11 @@ const CREATE_TABLES = `
 
   CREATE TABLE IF NOT EXISTS stats (
     player_name TEXT PRIMARY KEY,
-    total_games INTEGER NOT NULL,
-    total_balance INTEGER NOT NULL,
-    average_balance FLOAT NOT NULL,
-    best_balance INTEGER NOT NULL,
-    worst_balance INTEGER NOT NULL
+    total_games INTEGER NOT NULL DEFAULT 0,
+    total_balance INTEGER NOT NULL DEFAULT 0,
+    average_balance FLOAT NOT NULL DEFAULT 0,
+    best_balance INTEGER NOT NULL DEFAULT 0,
+    worst_balance INTEGER NOT NULL DEFAULT 0
   );
 `;
 
@@ -48,10 +48,31 @@ export async function initDatabase() {
     if (!isConnected) {
       throw new Error('データベースに接続できません');
     }
-    await sql.query(CREATE_TABLES);
-    console.log('テーブルの初期化が完了しました');
+
+    // テーブルの存在確認
+    const checkRecordsTable = await sql.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_name = 'records'
+      );
+    `);
+
+    const checkStatsTable = await sql.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_name = 'stats'
+      );
+    `);
+
+    if (!checkRecordsTable[0].exists || !checkStatsTable[0].exists) {
+      console.log('テーブルが存在しないため、作成を開始します');
+      await sql.query(CREATE_TABLES);
+      console.log('✅ テーブルの作成が完了しました');
+    } else {
+      console.log('✅ テーブルは既に存在します');
+    }
   } catch (error) {
-    console.error('データベースの初期化に失敗しました:', error);
+    console.error('❌ データベースの初期化に失敗しました:', error);
     throw error;
   }
 }

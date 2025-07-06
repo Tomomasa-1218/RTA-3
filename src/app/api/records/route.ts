@@ -1,11 +1,26 @@
 import { NextResponse } from 'next/server';
 import { saveRecord, getPlayerRecords, initDatabase } from '@/lib/db';
 
-// データベースの初期化
-initDatabase().catch(console.error);
+// データベースの初期化を行う関数
+let isInitialized = false;
+async function ensureDatabaseInitialized() {
+  if (!isInitialized) {
+    try {
+      await initDatabase();
+      isInitialized = true;
+      console.log('✅ データベースの初期化が完了しました');
+    } catch (error) {
+      console.error('❌ データベースの初期化に失敗しました:', error);
+      throw error;
+    }
+  }
+}
 
 export async function POST(request: Request) {
   try {
+    // データベースの初期化を確認
+    await ensureDatabaseInitialized();
+
     const body = await request.json();
     
     // 入力値の検証
@@ -47,6 +62,9 @@ export async function POST(request: Request) {
 
 export async function GET(request: Request) {
   try {
+    // データベースの初期化を確認
+    await ensureDatabaseInitialized();
+
     const { searchParams } = new URL(request.url);
     const playerName = searchParams.get('playerName');
 
