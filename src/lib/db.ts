@@ -9,7 +9,7 @@ const sql = neon(process.env.DATABASE_URL || DEV_DATABASE_URL);
 // データベース接続のテスト
 async function testConnection() {
   try {
-    await sql.query('SELECT 1');
+    await sql`SELECT 1`;
     console.log('✅ データベース接続成功');
     return true;
   } catch (error) {
@@ -19,7 +19,7 @@ async function testConnection() {
 }
 
 // テーブル作成用のSQL
-const CREATE_TABLES = `
+const CREATE_RECORDS_TABLE = `
   CREATE TABLE IF NOT EXISTS records (
     id TEXT PRIMARY KEY,
     player_name TEXT NOT NULL,
@@ -29,8 +29,10 @@ const CREATE_TABLES = `
     add_ons INTEGER NOT NULL,
     point_balance INTEGER NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-  );
+  )
+`;
 
+const CREATE_STATS_TABLE = `
   CREATE TABLE IF NOT EXISTS stats (
     player_name TEXT PRIMARY KEY,
     total_games INTEGER NOT NULL DEFAULT 0,
@@ -38,7 +40,7 @@ const CREATE_TABLES = `
     average_balance FLOAT NOT NULL DEFAULT 0,
     best_balance INTEGER NOT NULL DEFAULT 0,
     worst_balance INTEGER NOT NULL DEFAULT 0
-  );
+  )
 `;
 
 // テーブルの初期化
@@ -50,23 +52,27 @@ export async function initDatabase() {
     }
 
     // テーブルの存在確認
-    const checkRecordsTable = await sql.query(`
+    const checkRecordsTable = await sql`
       SELECT EXISTS (
         SELECT FROM information_schema.tables 
         WHERE table_name = 'records'
-      );
-    `);
+      )
+    `;
 
-    const checkStatsTable = await sql.query(`
+    const checkStatsTable = await sql`
       SELECT EXISTS (
         SELECT FROM information_schema.tables 
         WHERE table_name = 'stats'
-      );
-    `);
+      )
+    `;
 
     if (!checkRecordsTable[0].exists || !checkStatsTable[0].exists) {
       console.log('テーブルが存在しないため、作成を開始します');
-      await sql.query(CREATE_TABLES);
+      
+      // テーブルを個別に作成
+      await sql.query(CREATE_RECORDS_TABLE);
+      await sql.query(CREATE_STATS_TABLE);
+      
       console.log('✅ テーブルの作成が完了しました');
     } else {
       console.log('✅ テーブルは既に存在します');
@@ -83,19 +89,22 @@ export async function saveRecord(record: Omit<PokerRecord, 'id' | 'createdAt'>) 
   
   try {
     // レコードを保存
-    await sql.query(
-      'INSERT INTO records (id, player_name, date, initial_points, final_points, add_ons, point_balance) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-      [id, record.playerName, record.date, record.initialPoints, record.finalPoints, record.addOns, record.pointBalance]
-    );
+    await sql`
+      INSERT INTO records (id, player_name, date, initial_points, final_points, add_ons, point_balance) 
+      VALUES (${id}, ${record.playerName}, ${record.date}, ${record.initialPoints}, ${record.finalPoints}, ${record.addOns}, ${record.pointBalance})
+    `;
 
     // 統計を更新
     await updatePlayerStats(record.playerName, record.pointBalance);
 
     // 保存したレコードを取得
-    const result = await sql.query(
-      'SELECT id, player_name as "playerName", date, initial_points as "initialPoints", final_points as "finalPoints", add_ons as "addOns", point_balance as "pointBalance", created_at as "createdAt" FROM records WHERE id = $1',
-      [id]
-    );
+    const result = await sql`
+      SELECT id, player_name as "playerName", date, initial_points as "initialPoints", 
+             final_points as "finalPoints", add_ons as "addOns", point_balance as "pointBalance", 
+             created_at as "createdAt" 
+      FROM records 
+      WHERE id = ${id}
+    `;
 
     if (!result || result.length === 0) {
       throw new Error('保存したレコードが見つかりません');
@@ -114,10 +123,14 @@ export async function saveRecord(record: Omit<PokerRecord, 'id' | 'createdAt'>) 
 // プレイヤーの記録を取得
 export async function getPlayerRecords(playerName: string): Promise<PokerRecord[]> {
   try {
-    const result = await sql.query(
-      'SELECT id, player_name as "playerName", date, initial_points as "initialPoints", final_points as "finalPoints", add_ons as "addOns", point_balance as "pointBalance", created_at as "createdAt" FROM records WHERE player_name = $1 ORDER BY date DESC',
-      [playerName]
-    );
+    const result = await sql`
+      SELECT id, player_name as "playerName", date, initial_points as "initialPoints", 
+             final_points as "finalPoints", add_ons as "addOns", point_balance as "pointBalance", 
+             created_at as "createdAt" 
+      FROM records 
+      WHERE player_name = ${playerName} 
+      ORDER BY date DESC
+    `;
     return result as PokerRecord[];
   } catch (error) {
     console.error('Failed to get player records:', error);
@@ -128,10 +141,13 @@ export async function getPlayerRecords(playerName: string): Promise<PokerRecord[
 // プレイヤーの統計を取得
 export async function getPlayerStats(playerName: string): Promise<PlayerStats | null> {
   try {
-    const result = await sql.query(
-      'SELECT player_name as "playerName", total_games as "totalGames", total_balance as "totalBalance", average_balance as "averageBalance", best_balance as "bestBalance", worst_balance as "worstBalance" FROM stats WHERE player_name = $1',
-      [playerName]
-    );
+    const result = await sql`
+      SELECT player_name as "playerName", total_games as "totalGames", 
+             total_balance as "totalBalance", average_balance as "averageBalance", 
+             best_balance as "bestBalance", worst_balance as "worstBalance" 
+      FROM stats 
+      WHERE player_name = ${playerName}
+    `;
     return (result[0] as PlayerStats) || null;
   } catch (error) {
     console.error('Failed to get player stats:', error);
@@ -147,10 +163,10 @@ async function updatePlayerStats(playerName: string, newBalance: number) {
     
     if (!currentStats) {
       // 新規プレイヤーの場合
-      await sql.query(
-        'INSERT INTO stats (player_name, total_games, total_balance, average_balance, best_balance, worst_balance) VALUES ($1, 1, $2, $2, $2, $2)',
-        [playerName, newBalance]
-      );
+      await sql`
+        INSERT INTO stats (player_name, total_games, total_balance, average_balance, best_balance, worst_balance) 
+        VALUES (${playerName}, 1, ${newBalance}, ${newBalance}, ${newBalance}, ${newBalance})
+      `;
     } else {
       // 既存プレイヤーの統計を更新
       const newStats = {
@@ -161,17 +177,15 @@ async function updatePlayerStats(playerName: string, newBalance: number) {
         worstBalance: Math.min(currentStats.worstBalance, newBalance)
       };
 
-      await sql.query(
-        'UPDATE stats SET total_games = $1, total_balance = $2, average_balance = $3, best_balance = $4, worst_balance = $5 WHERE player_name = $6',
-        [
-          newStats.totalGames,
-          newStats.totalBalance,
-          newStats.averageBalance,
-          newStats.bestBalance,
-          newStats.worstBalance,
-          playerName
-        ]
-      );
+      await sql`
+        UPDATE stats 
+        SET total_games = ${newStats.totalGames}, 
+            total_balance = ${newStats.totalBalance}, 
+            average_balance = ${newStats.averageBalance}, 
+            best_balance = ${newStats.bestBalance}, 
+            worst_balance = ${newStats.worstBalance} 
+        WHERE player_name = ${playerName}
+      `;
     }
   } catch (error) {
     console.error('Failed to update player stats:', error);
