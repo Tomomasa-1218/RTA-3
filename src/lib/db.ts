@@ -42,8 +42,7 @@ export async function saveRecord(record: Omit<PokerRecord, 'id' | 'createdAt'>) 
   try {
     // レコードを保存
     await sql.query(
-      `INSERT INTO records (id, player_name, date, initial_points, final_points, add_ons, point_balance)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      'INSERT INTO records (id, player_name, date, initial_points, final_points, add_ons, point_balance) VALUES ($1, $2, $3, $4, $5, $6, $7)',
       [id, record.playerName, record.date, record.initialPoints, record.finalPoints, record.addOns, record.pointBalance]
     );
 
@@ -51,12 +50,12 @@ export async function saveRecord(record: Omit<PokerRecord, 'id' | 'createdAt'>) 
     await updatePlayerStats(record.playerName, record.pointBalance);
 
     // 保存したレコードを取得
-    const savedRecord = await sql.query(
-      'SELECT *, created_at as "createdAt" FROM records WHERE id = $1',
+    const result = await sql.query(
+      'SELECT id, player_name as "playerName", date, initial_points as "initialPoints", final_points as "finalPoints", add_ons as "addOns", point_balance as "pointBalance", created_at as "createdAt" FROM records WHERE id = $1',
       [id]
     );
 
-    return savedRecord.rows[0] as PokerRecord;
+    return result[0] as PokerRecord;
   } catch (error) {
     console.error('Failed to save record:', error);
     throw error;
@@ -67,10 +66,10 @@ export async function saveRecord(record: Omit<PokerRecord, 'id' | 'createdAt'>) 
 export async function getPlayerRecords(playerName: string): Promise<PokerRecord[]> {
   try {
     const result = await sql.query(
-      'SELECT *, created_at as "createdAt" FROM records WHERE player_name = $1 ORDER BY date DESC',
+      'SELECT id, player_name as "playerName", date, initial_points as "initialPoints", final_points as "finalPoints", add_ons as "addOns", point_balance as "pointBalance", created_at as "createdAt" FROM records WHERE player_name = $1 ORDER BY date DESC',
       [playerName]
     );
-    return result.rows as PokerRecord[];
+    return result as PokerRecord[];
   } catch (error) {
     console.error('Failed to get player records:', error);
     return [];
@@ -81,10 +80,10 @@ export async function getPlayerRecords(playerName: string): Promise<PokerRecord[
 export async function getPlayerStats(playerName: string): Promise<PlayerStats | null> {
   try {
     const result = await sql.query(
-      'SELECT * FROM stats WHERE player_name = $1',
+      'SELECT player_name as "playerName", total_games as "totalGames", total_balance as "totalBalance", average_balance as "averageBalance", best_balance as "bestBalance", worst_balance as "worstBalance" FROM stats WHERE player_name = $1',
       [playerName]
     );
-    return result.rows[0] as PlayerStats || null;
+    return (result[0] as PlayerStats) || null;
   } catch (error) {
     console.error('Failed to get player stats:', error);
     return null;
@@ -100,8 +99,7 @@ async function updatePlayerStats(playerName: string, newBalance: number) {
     if (!currentStats) {
       // 新規プレイヤーの場合
       await sql.query(
-        `INSERT INTO stats (player_name, total_games, total_balance, average_balance, best_balance, worst_balance)
-         VALUES ($1, 1, $2, $2, $2, $2)`,
+        'INSERT INTO stats (player_name, total_games, total_balance, average_balance, best_balance, worst_balance) VALUES ($1, 1, $2, $2, $2, $2)',
         [playerName, newBalance]
       );
     } else {
@@ -115,9 +113,7 @@ async function updatePlayerStats(playerName: string, newBalance: number) {
       };
 
       await sql.query(
-        `UPDATE stats 
-         SET total_games = $1, total_balance = $2, average_balance = $3, best_balance = $4, worst_balance = $5
-         WHERE player_name = $6`,
+        'UPDATE stats SET total_games = $1, total_balance = $2, average_balance = $3, best_balance = $4, worst_balance = $5 WHERE player_name = $6',
         [
           newStats.totalGames,
           newStats.totalBalance,
