@@ -332,4 +332,37 @@ async function updatePlayerStats(playerName: string, newBalance: number) {
     console.error('Failed to update player stats:', error);
     throw error;
   }
+}
+
+// 日付別の記録を取得
+export async function getDailyRecords(date: string): Promise<PokerRecord[]> {
+  try {
+    const result = await sql`
+      SELECT id, player_name as "playerName", date, initial_points as "initialPoints", 
+             final_points as "finalPoints", add_ons as "addOns", point_balance as "pointBalance", 
+             created_at as "createdAt" 
+      FROM records 
+      WHERE date = ${date}
+      ORDER BY player_name
+    `;
+    return result as PokerRecord[];
+  } catch (error) {
+    console.error('Failed to get daily records:', error);
+    return [];
+  }
+}
+
+// 日付一覧を取得（記録がある日付のみ）
+export async function getRecordDates(): Promise<string[]> {
+  try {
+    const result = await sql`
+      SELECT DISTINCT date 
+      FROM records 
+      ORDER BY date DESC
+    `;
+    return result.map(row => row.date);
+  } catch (error) {
+    console.error('Failed to get record dates:', error);
+    return [];
+  }
 } 
