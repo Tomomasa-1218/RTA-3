@@ -1,19 +1,57 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { PokerRecord, PlayerStats } from '@/types/poker';
+import { PokerRecord, PlayerStats, Settings, Player } from '@/types/poker';
+import Link from 'next/link';
 
 export default function Home() {
   const [playerName, setPlayerName] = useState<string>('');
   const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [initialPoints, setInitialPoints] = useState<number>(0);
+  const [initialPoints, setInitialPoints] = useState<number>(20000);
   const [finalPoints, setFinalPoints] = useState<number>(0);
   const [addOns, setAddOns] = useState<number>(0);
   const [pointBalance, setPointBalance] = useState<number | null>(null);
   const [records, setRecords] = useState<PokerRecord[]>([]);
   const [stats, setStats] = useState<PlayerStats | null>(null);
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [settings, setSettings] = useState<Settings>({ players: [], defaultInitialPoints: 20000 });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadPlayersAndSettings();
+  }, []);
+
+  useEffect(() => {
+    if (playerName) {
+      loadPlayerData(playerName);
+    } else {
+      setRecords([]);
+      setStats(null);
+    }
+  }, [playerName]);
+
+  const loadPlayersAndSettings = async () => {
+    try {
+      const [playersResponse, settingsResponse] = await Promise.all([
+        fetch('/api/players'),
+        fetch('/api/settings')
+      ]);
+
+      if (playersResponse.ok && settingsResponse.ok) {
+        const [playersData, settingsData] = await Promise.all([
+          playersResponse.json(),
+          settingsResponse.json()
+        ]);
+
+        setPlayers(playersData);
+        setSettings(settingsData);
+        setInitialPoints(settingsData.defaultInitialPoints);
+      }
+    } catch (error) {
+      console.error('Error loading players and settings:', error);
+    }
+  };
 
   const calculatePointBalance = () => {
     const balance = finalPoints - initialPoints * (addOns + 1);
@@ -58,7 +96,7 @@ export default function Home() {
 
       // フォームをリセット
       setDate(new Date().toISOString().split('T')[0]);
-      setInitialPoints(0);
+      setInitialPoints(settings.defaultInitialPoints);
       setFinalPoints(0);
       setAddOns(0);
       setPointBalance(null);
@@ -111,18 +149,17 @@ export default function Home() {
     }
   };
 
-  useEffect(() => {
-    if (playerName) {
-      loadPlayerData(playerName);
-    } else {
-      setRecords([]);
-      setStats(null);
-    }
-  }, [playerName]);
-
   return (
     <main className="container mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold text-center mb-8">ポーカー成績トラッカー</h1>
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-3xl font-bold">ポーカー成績トラッカー</h1>
+        <Link 
+          href="/settings"
+          className="bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600 transition-colors"
+        >
+          設定
+        </Link>
+      </div>
       
       {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4">
@@ -134,13 +171,27 @@ export default function Home() {
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700">プレイヤー名</label>
-            <input
-              type="text"
+            <select
               value={playerName}
               onChange={(e) => setPlayerName(e.target.value)}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              placeholder="プレイヤー名を入力"
-            />
+            >
+              <option value="">プレイヤーを選択してください</option>
+              {players.map((player) => (
+                <option key={player.id} value={player.name}>
+                  {player.name}
+                </option>
+              ))}
+            </select>
+            {players.length === 0 && (
+              <p className="text-sm text-gray-500 mt-1">
+                プレイヤーが登録されていません。
+                <Link href="/settings" className="text-blue-500 hover:underline">
+                  設定ページ
+                </Link>
+                で追加してください。
+              </p>
+            )}
           </div>
 
           <div>
@@ -189,7 +240,7 @@ export default function Home() {
           
           <button
             onClick={handleSubmit}
-            disabled={isLoading}
+            disabled={isLoading || !playerName}
             className="w-full bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 transition-colors disabled:bg-blue-300"
           >
             {isLoading ? '保存中...' : '記録を保存'}

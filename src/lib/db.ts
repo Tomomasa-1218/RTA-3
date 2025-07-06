@@ -1,5 +1,5 @@
 import { neon } from '@neondatabase/serverless';
-import { PokerRecord, PlayerStats } from '@/types/poker';
+import { PokerRecord, PlayerStats, Settings, Player } from '@/types/poker';
 
 // 開発環境用のデフォルト接続文字列
 const DEV_DATABASE_URL = 'postgres://default:default@ep-cool-forest-123456.us-east-1.aws.neon.tech/neondb';
@@ -43,6 +43,21 @@ const CREATE_STATS_TABLE = `
   )
 `;
 
+const CREATE_PLAYERS_TABLE = `
+  CREATE TABLE IF NOT EXISTS players (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+  )
+`;
+
+const CREATE_SETTINGS_TABLE = `
+  CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  )
+`;
+
 // テーブルの初期化
 export async function initDatabase() {
   try {
@@ -66,12 +81,36 @@ export async function initDatabase() {
       )
     `;
 
-    if (!checkRecordsTable[0].exists || !checkStatsTable[0].exists) {
+    const checkPlayersTable = await sql`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_name = 'players'
+      )
+    `;
+
+    const checkSettingsTable = await sql`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_name = 'settings'
+      )
+    `;
+
+    if (!checkRecordsTable[0].exists || !checkStatsTable[0].exists || 
+        !checkPlayersTable[0].exists || !checkSettingsTable[0].exists) {
       console.log('テーブルが存在しないため、作成を開始します');
       
       // テーブルを個別に作成
       await sql.query(CREATE_RECORDS_TABLE);
       await sql.query(CREATE_STATS_TABLE);
+      await sql.query(CREATE_PLAYERS_TABLE);
+      await sql.query(CREATE_SETTINGS_TABLE);
+      
+      // デフォルト設定を挿入
+      await sql`
+        INSERT INTO settings (key, value) 
+        VALUES ('defaultInitialPoints', '20000')
+        ON CONFLICT (key) DO NOTHING
+      `;
       
       console.log('✅ テーブルの作成が完了しました');
     } else {
@@ -80,6 +119,91 @@ export async function initDatabase() {
   } catch (error) {
     console.error('❌ データベースの初期化に失敗しました:', error);
     throw error;
+  }
+}
+
+// プレイヤー管理
+export async function addPlayer(name: string): Promise<Player> {
+  const id = `player_${Date.now()}`;
+  try {
+    await sql`
+      INSERT INTO players (id, name) 
+      VALUES (${id}, ${name})
+    `;
+    
+    const result = await sql`
+      SELECT id, name, created_at as "createdAt" 
+      FROM players 
+      WHERE id = ${id}
+    `;
+    
+    return result[0] as Player;
+  } catch (error) {
+    console.error('Failed to add player:', error);
+    throw new Error('プレイヤーの追加に失敗しました');
+  }
+}
+
+export async function getPlayers(): Promise<Player[]> {
+  try {
+    const result = await sql`
+      SELECT id, name, created_at as "createdAt" 
+      FROM players 
+      ORDER BY name
+    `;
+    return result as Player[];
+  } catch (error) {
+    console.error('Failed to get players:', error);
+    return [];
+  }
+}
+
+export async function deletePlayer(id: string): Promise<void> {
+  try {
+    await sql`
+      DELETE FROM players 
+      WHERE id = ${id}
+    `;
+  } catch (error) {
+    console.error('Failed to delete player:', error);
+    throw new Error('プレイヤーの削除に失敗しました');
+  }
+}
+
+// 設定管理
+export async function getSettings(): Promise<Settings> {
+  try {
+    const result = await sql`
+      SELECT key, value 
+      FROM settings
+    `;
+    
+    const players = await getPlayers();
+    const defaultInitialPoints = result.find(r => r.key === 'defaultInitialPoints')?.value || '20000';
+    
+    return {
+      players: players.map(p => p.name),
+      defaultInitialPoints: parseInt(defaultInitialPoints)
+    };
+  } catch (error) {
+    console.error('Failed to get settings:', error);
+    return {
+      players: [],
+      defaultInitialPoints: 20000
+    };
+  }
+}
+
+export async function updateDefaultInitialPoints(points: number): Promise<void> {
+  try {
+    await sql`
+      INSERT INTO settings (key, value) 
+      VALUES ('defaultInitialPoints', ${points.toString()})
+      ON CONFLICT (key) DO UPDATE SET value = ${points.toString()}
+    `;
+  } catch (error) {
+    console.error('Failed to update default initial points:', error);
+    throw new Error('初期持ち点の更新に失敗しました');
   }
 }
 

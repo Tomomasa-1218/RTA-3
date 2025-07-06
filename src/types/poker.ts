@@ -15,4 +15,15 @@ export interface PlayerStats {
   averageBalance: number;
   bestBalance: number;
   worstBalance: number;
+}
+
+export interface Settings {
+  players: string[];
+  defaultInitialPoints: number;
+}
+
+export interface Player {
+  id: string;
+  name: string;
+  createdAt: string;
 } 
